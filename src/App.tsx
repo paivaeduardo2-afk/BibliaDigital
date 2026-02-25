@@ -61,7 +61,6 @@ export default function App() {
     
     fetchNotes();
 
-    // Check import status
     const checkStatus = () => {
       fetch("/api/bible/status")
         .then(res => res.json())
@@ -82,7 +81,6 @@ export default function App() {
       .then(data => setNotes(data));
   };
 
-  // Fetch Bible text when book or chapter changes
   useEffect(() => {
     if (selectedBook) {
       setIsLoading(true);
@@ -103,7 +101,6 @@ export default function App() {
     }
   }, [selectedBook, selectedChapter]);
 
-  // Scroll to highlighted verse
   useEffect(() => {
     if (highlightedVerse && !isLoading && activeTab === "read") {
       const timer = setTimeout(() => {
@@ -171,38 +168,41 @@ export default function App() {
   const readCount = readChapters.length;
   const progressPercent = Math.round((readCount / totalChapters) * 100);
 
-  const filteredNotes = notes; // Already filtered by server if query exists
+  const filteredNotes = notes;
 
   return (
-    <div className="flex h-screen bg-[#F5F2ED] text-[#1A1A1A] font-sans overflow-hidden">
+    <div className="flex h-screen bg-bible-bg text-bible-ink font-sans overflow-hidden selection:bg-bible-accent/10">
       {/* Mobile Menu Toggle */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-white rounded-full shadow-md"
+        className="lg:hidden fixed bottom-6 right-6 z-50 p-4 bg-bible-accent text-white rounded-full shadow-2xl hover:scale-110 transition-transform"
       >
-        {isSidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
       {/* Sidebar */}
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
           <motion.aside 
-            initial={{ x: -300, opacity: 0 }}
+            initial={{ x: -320, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -300, opacity: 0 }}
-            className="w-72 bg-white border-r border-black/5 flex flex-col h-full z-40"
+            exit={{ x: -320, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className="w-80 bg-white/40 backdrop-blur-xl border-r border-bible-border flex flex-col h-full z-40"
           >
-            <div className="p-6 border-bottom border-black/5">
-              <h1 className="text-2xl font-serif font-bold flex items-center gap-2">
-                <Book className="text-[#5A5A40]" />
-                Bíblia Digital
+            <div className="p-8">
+              <h1 className="text-3xl font-serif font-bold tracking-tight flex items-center gap-3">
+                <div className="w-10 h-10 bg-bible-accent rounded-xl flex items-center justify-center text-white shadow-lg shadow-bible-accent/20">
+                  <Book size={20} />
+                </div>
+                Bíblia
               </h1>
             </div>
 
-            <nav className="flex-1 overflow-y-auto p-4 space-y-6">
+            <nav className="flex-1 overflow-y-auto px-4 pb-8 space-y-8 no-scrollbar">
               {CATEGORIES.map(category => (
-                <div key={category}>
-                  <h3 className="text-[10px] uppercase tracking-widest font-semibold text-black/40 mb-3 px-2">
+                <div key={category} className="space-y-3">
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] font-bold text-bible-muted px-4">
                     {category}
                   </h3>
                   <div className="space-y-1">
@@ -216,14 +216,14 @@ export default function App() {
                           setActiveTab("read");
                           if (window.innerWidth < 1024) setIsSidebarOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between group ${
+                        className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-between group ${
                           selectedBook?.id === book.id 
-                            ? "bg-[#5A5A40] text-white" 
-                            : "hover:bg-black/5"
+                            ? "bg-bible-accent text-white shadow-md shadow-bible-accent/10" 
+                            : "text-bible-ink/60 hover:bg-bible-accent/5 hover:text-bible-ink"
                         }`}
                       >
                         <span>{book.name}</span>
-                        <ChevronRight size={14} className={selectedBook?.id === book.id ? "opacity-100" : "opacity-0 group-hover:opacity-50"} />
+                        <ChevronRight size={14} className={`transition-transform duration-300 ${selectedBook?.id === book.id ? "translate-x-0 opacity-100" : "-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-50"}`} />
                       </button>
                     ))}
                   </div>
@@ -231,16 +231,17 @@ export default function App() {
               ))}
             </nav>
 
-            <div className="p-4 border-t border-black/5 bg-black/5">
-              <div className="flex items-center justify-between text-xs font-semibold mb-2">
-                <span>Progresso Total</span>
-                <span>{progressPercent}%</span>
+            <div className="p-6 bg-white/50 border-t border-bible-border">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-bible-muted mb-3">
+                <span>Leitura Concluída</span>
+                <span className="text-bible-accent">{progressPercent}%</span>
               </div>
-              <div className="h-1.5 bg-black/10 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-bible-accent/10 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${progressPercent}%` }}
-                  className="h-full bg-[#5A5A40]"
+                  transition={{ duration: 1, ease: "easeOut" }}
+                  className="h-full bg-bible-accent"
                 />
               </div>
             </div>
@@ -252,61 +253,94 @@ export default function App() {
       <main className="flex-1 flex flex-col h-full relative overflow-hidden">
         {/* Import Status Bar */}
         {importStatus?.isImporting && (
-          <div className="bg-[#5A5A40] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest flex items-center justify-between">
-            <span>Importando Bíblia... {importStatus.progress}%</span>
-            <div className="w-32 h-1 bg-white/20 rounded-full overflow-hidden">
-              <div className="h-full bg-white" style={{ width: `${importStatus.progress}%` }} />
+          <div className="bg-bible-accent text-white px-6 py-2 text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-between z-50">
+            <span className="flex items-center gap-2">
+              <Loader2 size={12} className="animate-spin" />
+              Sincronizando Escrituras... {importStatus.progress}%
+            </span>
+            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-white transition-all duration-500" style={{ width: `${importStatus.progress}%` }} />
             </div>
           </div>
         )}
 
-        {/* Header Tabs */}
-        <header className="h-16 bg-white border-b border-black/5 flex items-center px-6 gap-8">
-          <button 
-            onClick={() => setActiveTab("read")}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === "read" ? "text-[#5A5A40]" : "text-black/40 hover:text-black"}`}
-          >
-            <BookOpen size={18} />
-            Leitura
-          </button>
-          <button 
-            onClick={() => setActiveTab("notes")}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === "notes" ? "text-[#5A5A40]" : "text-black/40 hover:text-black"}`}
-          >
-            <StickyNote size={18} />
-            Notas
-          </button>
-          <button 
-            onClick={() => setActiveTab("search")}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === "search" ? "text-[#5A5A40]" : "text-black/40 hover:text-black"}`}
-          >
-            <Search size={18} />
-            Pesquisa
-          </button>
-          <button 
-            onClick={() => setActiveTab("dashboard")}
-            className={`flex items-center gap-2 text-sm font-medium transition-colors ${activeTab === "dashboard" ? "text-[#5A5A40]" : "text-black/40 hover:text-black"}`}
-          >
-            <BarChart2 size={18} />
-            Estatísticas
-          </button>
+        {/* Header Navigation */}
+        <header className="h-20 bg-white/40 backdrop-blur-md border-b border-bible-border flex items-center justify-between px-8 z-30">
+          <div className="flex items-center gap-1 bg-bible-accent/5 p-1 rounded-2xl">
+            {[
+              { id: "read", icon: BookOpen, label: "Leitura" },
+              { id: "notes", icon: StickyNote, label: "Notas" },
+              { id: "search", icon: Search, label: "Busca" },
+              { id: "dashboard", icon: BarChart2, label: "Progresso" }
+            ].map((tab) => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === tab.id 
+                    ? "bg-white text-bible-accent shadow-sm" 
+                    : "text-bible-muted hover:text-bible-ink"
+                }`}
+              >
+                <tab.icon size={16} />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-bible-muted">Sessão de Leitura</span>
+              <span className="text-xs font-medium">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            </div>
+          </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 lg:p-12">
-          {activeTab === "read" && (
-            <div className="max-w-3xl mx-auto">
-              {!selectedBook ? (
-                <div className="h-full flex flex-col items-center justify-center text-center py-20">
-                  <BookOpen size={48} className="text-black/10 mb-4" />
-                  <h2 className="text-2xl font-serif font-bold mb-2">Selecione um livro</h2>
-                  <p className="text-black/40">Comece sua jornada de leitura escolhendo um livro na barra lateral.</p>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                    <div>
-                      <h2 className="text-4xl font-serif font-bold mb-2">{selectedBook.name}</h2>
-                      <div className="flex items-center gap-4 overflow-x-auto pb-2 no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-12 no-scrollbar">
+          <AnimatePresence mode="wait">
+            {activeTab === "read" && (
+              <motion.div 
+                key="read"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-4xl mx-auto"
+              >
+                {!selectedBook ? (
+                  <div className="h-[60vh] flex flex-col items-center justify-center text-center">
+                    <div className="w-24 h-24 bg-bible-accent/5 rounded-[2.5rem] flex items-center justify-center text-bible-accent/20 mb-8">
+                      <BookOpen size={48} />
+                    </div>
+                    <h2 className="text-4xl font-serif font-bold mb-4">Inicie sua Leitura</h2>
+                    <p className="text-bible-muted max-w-sm mx-auto leading-relaxed">
+                      Selecione um dos livros sagrados na barra lateral para começar sua jornada de reflexão e estudo.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-12">
+                    <div className="space-y-8">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-bible-muted mb-2 block">
+                            {selectedBook.category}
+                          </span>
+                          <h2 className="text-6xl font-serif font-bold tracking-tight">{selectedBook.name}</h2>
+                        </div>
+                        
+                        <button
+                          onClick={() => toggleRead(selectedBook.name, selectedChapter)}
+                          className={`flex items-center gap-3 px-8 py-4 rounded-2xl text-sm font-bold transition-all shadow-xl hover:scale-105 active:scale-95 ${
+                            readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter)
+                              ? "bg-bible-accent text-white shadow-bible-accent/20"
+                              : "bg-white border border-bible-border text-bible-accent hover:border-bible-accent/40"
+                          }`}
+                        >
+                          <CheckCircle size={20} />
+                          {readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter) ? "Capítulo Lido" : "Marcar como Lido"}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3 overflow-x-auto pb-4 no-scrollbar">
                         {Array.from({ length: selectedBook.chapters }, (_, i) => i + 1).map(ch => (
                           <button
                             key={ch}
@@ -314,12 +348,12 @@ export default function App() {
                               setSelectedChapter(ch);
                               setHighlightedVerse(null);
                             }}
-                            className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                            className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold transition-all ${
                               selectedChapter === ch 
-                                ? "bg-[#5A5A40] text-white shadow-lg" 
+                                ? "bg-bible-accent text-white shadow-lg shadow-bible-accent/20 scale-110" 
                                 : readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === ch)
-                                  ? "bg-[#5A5A40]/10 text-[#5A5A40] border border-[#5A5A40]/20"
-                                  : "bg-white border border-black/5 hover:border-black/20"
+                                  ? "bg-bible-accent/10 text-bible-accent border border-bible-accent/20"
+                                  : "bg-white border border-bible-border text-bible-ink/40 hover:border-bible-accent/40 hover:text-bible-accent"
                             }`}
                           >
                             {ch}
@@ -327,274 +361,324 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-                    <button
-                      onClick={() => toggleRead(selectedBook.name, selectedChapter)}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all shadow-sm ${
-                        readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter)
-                          ? "bg-[#5A5A40] text-white"
-                          : "bg-white border-2 border-[#5A5A40]/20 text-[#5A5A40] hover:border-[#5A5A40]/40"
-                      }`}
-                    >
-                      <CheckCircle size={18} />
-                      {readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter) ? "Lido" : "Marcar como lido"}
-                    </button>
-                  </div>
 
-                  <div className="bg-white rounded-3xl p-8 lg:p-12 shadow-sm border border-black/5 min-h-[400px]">
-                    {isLoading ? (
-                      <div className="h-full flex items-center justify-center py-20">
-                        <Loader2 className="animate-spin text-[#5A5A40]" size={32} />
-                      </div>
-                    ) : (
-                      <div className="prose prose-stone max-w-none">
-                        <h3 className="text-xl font-serif italic text-black/40 mb-8 border-b border-black/5 pb-4">
-                          Capítulo {selectedChapter}
-                        </h3>
-                        <div className="space-y-6">
-                          {bibleText.map(verse => (
-                            <p 
-                              key={verse.verse} 
-                              id={`verse-${verse.verse}`}
-                              className={`leading-relaxed text-lg transition-all duration-700 p-2 rounded-xl ${
-                                highlightedVerse === verse.verse 
-                                  ? "bg-[#5A5A40]/10 ring-1 ring-[#5A5A40]/20 shadow-sm" 
-                                  : ""
+                    <div className="card-elegant p-10 lg:p-20 relative">
+                      {isLoading ? (
+                        <div className="h-full flex items-center justify-center py-40">
+                          <Loader2 className="animate-spin text-bible-accent" size={48} />
+                        </div>
+                      ) : (
+                        <div className="max-w-2xl mx-auto">
+                          <div className="text-center mb-16">
+                            <h3 className="text-3xl font-serif italic text-bible-muted mb-4">
+                              Capítulo {selectedChapter}
+                            </h3>
+                            <div className="w-12 h-0.5 bg-bible-accent/20 mx-auto" />
+                          </div>
+                          
+                          <div className="space-y-10">
+                            {bibleText.map(verse => (
+                              <p 
+                                key={verse.verse} 
+                                id={`verse-${verse.verse}`}
+                                className={`leading-[1.8] text-xl font-serif transition-all duration-1000 p-4 rounded-2xl ${
+                                  highlightedVerse === verse.verse 
+                                    ? "bg-bible-accent/5 ring-1 ring-bible-accent/10 shadow-inner" 
+                                    : "hover:bg-bible-accent/[0.02]"
+                                }`}
+                              >
+                                <span className="inline-block w-8 text-[10px] font-mono font-bold text-bible-accent/40 mr-4 align-top mt-2">
+                                  {verse.verse.toString().padStart(2, '0')}
+                                </span>
+                                <span className="text-bible-ink/90">{verse.text}</span>
+                              </p>
+                            ))}
+                          </div>
+
+                          <div className="mt-24 pt-12 border-t border-bible-border flex flex-col items-center gap-8">
+                            <button
+                              onClick={() => toggleRead(selectedBook.name, selectedChapter)}
+                              className={`flex items-center gap-4 px-10 py-5 rounded-[2rem] text-lg font-bold transition-all shadow-2xl hover:scale-105 active:scale-95 ${
+                                readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter)
+                                  ? "bg-bible-accent text-white shadow-bible-accent/30"
+                                  : "bg-white border-2 border-bible-accent/10 text-bible-accent hover:border-bible-accent/30"
                               }`}
                             >
-                              <sup className="text-[10px] font-bold text-[#5A5A40] mr-2 uppercase tracking-tighter">
-                                {verse.verse}
-                              </sup>
-                              {verse.text}
+                              <CheckCircle size={24} />
+                              {readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter) ? "Capítulo Concluído" : "Finalizar Leitura"}
+                            </button>
+                            
+                            <p className="text-xs font-bold uppercase tracking-[0.3em] text-bible-muted">
+                              Palavra do Senhor
                             </p>
-                          ))}
+                          </div>
                         </div>
+                      )}
+                    </div>
 
-                        <div className="mt-12 pt-8 border-t border-black/5 flex justify-center">
+                    {/* Elegant Note Input */}
+                    <div className="card-elegant p-10 overflow-hidden relative">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-bible-accent/5 rounded-bl-[5rem] -mr-8 -mt-8" />
+                      <div className="relative">
+                        <h4 className="text-xs font-bold uppercase tracking-[0.3em] text-bible-muted mb-6 flex items-center gap-3">
+                          <StickyNote size={14} />
+                          Reflexões do Dia
+                        </h4>
+                        <textarea
+                          value={noteContent}
+                          onChange={(e) => setNoteContent(e.target.value)}
+                          placeholder={`O que o Espírito falou ao seu coração em ${selectedBook.name} ${selectedChapter}?`}
+                          className="w-full h-40 p-6 bg-bible-bg/50 rounded-3xl border border-bible-border focus:border-bible-accent/30 focus:ring-4 focus:ring-bible-accent/5 outline-none resize-none mb-6 transition-all font-serif text-lg leading-relaxed"
+                        />
+                        <div className="flex justify-end">
                           <button
-                            onClick={() => toggleRead(selectedBook.name, selectedChapter)}
-                            className={`flex items-center gap-3 px-8 py-4 rounded-full text-base font-bold transition-all shadow-sm hover:shadow-md ${
-                              readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter)
-                                ? "bg-[#5A5A40] text-white"
-                                : "bg-white border-2 border-[#5A5A40]/20 text-[#5A5A40] hover:border-[#5A5A40]/40"
-                            }`}
+                            onClick={addNote}
+                            disabled={!noteContent.trim()}
+                            className="flex items-center gap-3 px-8 py-3.5 bg-bible-accent text-white rounded-2xl text-sm font-bold hover:bg-bible-accent/90 disabled:opacity-30 transition-all shadow-lg shadow-bible-accent/20"
                           >
-                            <CheckCircle size={20} />
-                            {readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter) ? "Capítulo Concluído" : "Marcar Capítulo como Lido"}
+                            <Plus size={18} />
+                            Guardar Reflexão
                           </button>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
+                )}
+              </motion.div>
+            )}
 
-                  {/* Quick Note for current chapter */}
-                  <div className="bg-white rounded-3xl p-8 shadow-sm border border-black/5">
-                    <h4 className="text-sm font-bold uppercase tracking-widest text-black/40 mb-4">Adicionar Nota</h4>
-                    <textarea
-                      value={noteContent}
-                      onChange={(e) => setNoteContent(e.target.value)}
-                      placeholder={`O que você aprendeu em ${selectedBook.name} ${selectedChapter}?`}
-                      className="w-full h-32 p-4 bg-[#F5F2ED] rounded-2xl border-none focus:ring-2 focus:ring-[#5A5A40]/20 resize-none mb-4"
+            {activeTab === "notes" && (
+              <motion.div 
+                key="notes"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-5xl mx-auto space-y-12"
+              >
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-bible-muted">Seu Diário Espiritual</span>
+                    <h2 className="text-5xl font-serif font-bold">Minhas Notas</h2>
+                  </div>
+                  <div className="relative w-full md:w-80">
+                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-bible-muted" size={18} />
+                    <input
+                      type="text"
+                      placeholder="Buscar em suas reflexões..."
+                      value={noteSearch}
+                      onChange={(e) => {
+                        setNoteSearch(e.target.value);
+                        fetchNotes(e.target.value);
+                      }}
+                      className="w-full pl-14 pr-6 py-4 bg-white border border-bible-border rounded-2xl text-sm font-medium focus:ring-4 focus:ring-bible-accent/5 focus:border-bible-accent/20 outline-none shadow-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {filteredNotes.map((note, idx) => (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: idx * 0.05 }}
+                      key={note.id}
+                      className="card-elegant p-8 group relative overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-bible-accent/5 rounded-lg flex items-center justify-center text-bible-accent">
+                            <Book size={14} />
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-bible-accent">
+                            {note.book} {note.chapter}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => deleteNote(note.id)}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-bible-muted hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <p className="text-bible-ink/80 font-serif text-lg leading-relaxed mb-8 italic">"{note.content}"</p>
+                      <div className="flex items-center gap-2 text-[10px] text-bible-muted font-bold uppercase tracking-widest">
+                        <div className="w-1 h-1 bg-bible-accent/30 rounded-full" />
+                        {new Date(note.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                      </div>
+                    </motion.div>
+                  ))}
+                  {filteredNotes.length === 0 && (
+                    <div className="col-span-full py-32 text-center">
+                      <div className="w-20 h-20 bg-bible-accent/5 rounded-[2rem] flex items-center justify-center text-bible-accent/20 mx-auto mb-6">
+                        <StickyNote size={32} />
+                      </div>
+                      <p className="text-bible-muted font-medium">Nenhuma reflexão encontrada em seu diário.</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === "search" && (
+              <motion.div 
+                key="search"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-5xl mx-auto space-y-12"
+              >
+                <div className="space-y-8 text-center max-w-2xl mx-auto">
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-bible-muted">Explorar as Escrituras</span>
+                    <h2 className="text-5xl font-serif font-bold">Busca Bíblica</h2>
+                  </div>
+                  <div className="relative group">
+                    <Search className="absolute left-8 top-1/2 -translate-y-1/2 text-bible-muted group-focus-within:text-bible-accent transition-colors" size={28} />
+                    <input
+                      type="text"
+                      placeholder="Busque por temas, palavras ou promessas..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      className="w-full pl-20 pr-40 py-8 bg-white border border-bible-border rounded-[2.5rem] text-xl font-serif focus:ring-8 focus:ring-bible-accent/5 focus:border-bible-accent/20 outline-none shadow-2xl transition-all"
                     />
                     <button
-                      onClick={addNote}
-                      disabled={!noteContent.trim()}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#5A5A40] text-white rounded-full text-sm font-semibold hover:bg-[#4A4A30] disabled:opacity-50 transition-colors"
+                      onClick={handleSearch}
+                      disabled={isSearching || !searchQuery.trim()}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 px-10 py-4 bg-bible-accent text-white rounded-[1.8rem] text-sm font-bold hover:bg-bible-accent/90 disabled:opacity-30 transition-all shadow-xl shadow-bible-accent/20"
                     >
-                      <Plus size={18} />
-                      Salvar Nota
+                      {isSearching ? <Loader2 className="animate-spin" size={20} /> : "Pesquisar"}
                     </button>
                   </div>
+                  <p className="text-xs text-bible-muted font-medium italic">
+                    Utilizando o índice completo da Bíblia Almeida para resultados instantâneos.
+                  </p>
                 </div>
-              )}
-            </div>
-          )}
 
-          {activeTab === "notes" && (
-            <div className="max-w-4xl mx-auto space-y-8">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 className="text-3xl font-serif font-bold">Minhas Notas</h2>
-                <div className="relative w-full md:w-72">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-black/20" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Pesquisar notas..."
-                    value={noteSearch}
-                    onChange={(e) => {
-                      setNoteSearch(e.target.value);
-                      fetchNotes(e.target.value);
-                    }}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-black/5 rounded-full text-sm focus:ring-2 focus:ring-[#5A5A40]/20 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredNotes.map(note => (
-                  <motion.div 
-                    layout
-                    key={note.id}
-                    className="bg-white p-6 rounded-3xl shadow-sm border border-black/5 group"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] bg-[#5A5A40]/5 px-3 py-1 rounded-full">
-                        {note.book} {note.chapter}
-                      </span>
-                      <button 
-                        onClick={() => deleteNote(note.id)}
-                        className="text-black/20 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                    <p className="text-black/70 leading-relaxed mb-4">{note.content}</p>
-                    <div className="text-[10px] text-black/30 font-medium">
-                      {new Date(note.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </div>
-                  </motion.div>
-                ))}
-                {filteredNotes.length === 0 && (
-                  <div className="col-span-full py-20 text-center">
-                    <StickyNote size={48} className="text-black/10 mx-auto mb-4" />
-                    <p className="text-black/40">Nenhuma nota encontrada.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "search" && (
-            <div className="max-w-4xl mx-auto space-y-8">
-              <div className="space-y-4">
-                <h2 className="text-3xl font-serif font-bold">Pesquisar na Bíblia</h2>
-                <div className="relative">
-                  <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-black/20" size={24} />
-                  <input
-                    type="text"
-                    placeholder="Digite uma palavra ou frase (ex: 'amor', 'fé', 'Jesus')..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSearch();
-                      }
-                    }}
-                    className="w-full pl-16 pr-32 py-6 bg-white border border-black/5 rounded-3xl text-lg focus:ring-2 focus:ring-[#5A5A40]/20 outline-none shadow-sm"
-                  />
-                  <button
-                    onClick={handleSearch}
-                    disabled={isSearching || !searchQuery.trim()}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 px-6 py-2 bg-[#5A5A40] text-white rounded-full text-sm font-semibold hover:bg-[#4A4A30] disabled:opacity-50 transition-colors"
-                  >
-                    {isSearching ? <Loader2 className="animate-spin" size={18} /> : "Buscar"}
-                  </button>
-                </div>
-                <p className="text-xs text-black/40 px-4 italic">
-                  A pesquisa utiliza o índice local da Bíblia Almeida para encontrar versículos específicos instantaneamente.
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                {searchResults.map((result, idx) => (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    key={`${result.book}-${result.chapter}-${result.verse}`}
-                    className="bg-white p-6 rounded-3xl shadow-sm border border-black/5 hover:border-[#5A5A40]/30 transition-colors cursor-pointer"
-                    onClick={() => {
-                      const book = BIBLE_BOOKS.find(b => b.name === result.book);
-                      if (book) {
-                        setSelectedBook(book);
-                        setSelectedChapter(result.chapter);
-                        setHighlightedVerse(result.verse);
-                        setActiveTab("read");
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40]">
-                        {result.book} {result.chapter}:{result.verse}
-                      </span>
-                      <ChevronRight size={14} className="text-black/20" />
-                    </div>
-                    <p className="text-black/70 leading-relaxed">{result.text}</p>
-                  </motion.div>
-                ))}
-
-                {searchResults.length === 0 && !isSearching && searchQuery && (
-                  <div className="bg-white rounded-3xl p-12 shadow-sm border border-black/5 text-center">
-                    <Search size={48} className="text-black/10 mx-auto mb-4" />
-                    <h3 className="text-xl font-serif font-bold mb-2">Nenhum resultado encontrado</h3>
-                    <p className="text-black/40 max-w-md mx-auto">
-                      Tente usar palavras diferentes ou verifique a ortografia.
-                    </p>
-                  </div>
-                )}
-
-                {!searchQuery && (
-                  <div className="bg-white rounded-3xl p-12 shadow-sm border border-black/5 text-center">
-                    <Book size={48} className="text-black/10 mx-auto mb-4" />
-                    <h3 className="text-xl font-serif font-bold mb-2">Pronto para pesquisar</h3>
-                    <p className="text-black/40 max-w-md mx-auto">
-                      Pesquise por qualquer palavra ou tema em toda a Bíblia Sagrada.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "dashboard" && (
-            <div className="max-w-4xl mx-auto space-y-8">
-              <h2 className="text-3xl font-serif font-bold">Seu Progresso</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-black/5">
-                  <div className="text-black/40 text-[10px] font-bold uppercase tracking-widest mb-2">Capítulos Lidos</div>
-                  <div className="text-5xl font-serif font-bold text-[#5A5A40]">{readCount}</div>
-                  <div className="text-xs text-black/30 mt-2">de {totalChapters} totais</div>
-                </div>
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-black/5">
-                  <div className="text-black/40 text-[10px] font-bold uppercase tracking-widest mb-2">Conclusão</div>
-                  <div className="text-5xl font-serif font-bold text-[#5A5A40]">{progressPercent}%</div>
-                  <div className="text-xs text-black/30 mt-2">da Bíblia completa</div>
-                </div>
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-black/5">
-                  <div className="text-black/40 text-[10px] font-bold uppercase tracking-widest mb-2">Notas Criadas</div>
-                  <div className="text-5xl font-serif font-bold text-[#5A5A40]">{notes.length}</div>
-                  <div className="text-xs text-black/30 mt-2">reflexões pessoais</div>
-                </div>
-              </div>
-
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-black/5">
-                <h3 className="text-sm font-bold uppercase tracking-widest text-black/40 mb-6">Progresso por Categoria</h3>
                 <div className="space-y-6">
-                  {CATEGORIES.map(cat => {
-                    const catBooks = BIBLE_BOOKS.filter(b => b.category === cat);
-                    const catTotal = catBooks.reduce((acc, b) => acc + b.chapters, 0);
-                    const catRead = readChapters.filter(rc => catBooks.some(b => b.name === rc.book)).length;
-                    const catPercent = Math.round((catRead / catTotal) * 100);
-
-                    return (
-                      <div key={cat} className="space-y-2">
-                        <div className="flex justify-between text-sm font-medium">
-                          <span>{cat}</span>
-                          <span className="text-black/40">{catRead}/{catTotal} ({catPercent}%)</span>
+                  {searchResults.map((result, idx) => (
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.03 }}
+                      key={`${result.book}-${result.chapter}-${result.verse}`}
+                      className="card-elegant p-8 hover:border-bible-accent/30 transition-all cursor-pointer group"
+                      onClick={() => {
+                        const book = BIBLE_BOOKS.find(b => b.name === result.book);
+                        if (book) {
+                          setSelectedBook(book);
+                          setSelectedChapter(result.chapter);
+                          setHighlightedVerse(result.verse);
+                          setActiveTab("read");
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-bible-accent/5 rounded-lg flex items-center justify-center text-bible-accent">
+                            <Book size={14} />
+                          </div>
+                          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-bible-accent">
+                            {result.book} {result.chapter}:{result.verse}
+                          </span>
                         </div>
-                        <div className="h-2 bg-black/5 rounded-full overflow-hidden">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${catPercent}%` }}
-                            className="h-full bg-[#5A5A40]"
-                          />
+                        <div className="w-8 h-8 rounded-full border border-bible-border flex items-center justify-center text-bible-muted group-hover:bg-bible-accent group-hover:text-white group-hover:border-bible-accent transition-all">
+                          <ChevronRight size={16} />
                         </div>
                       </div>
-                    );
-                  })}
+                      <p className="text-bible-ink/80 font-serif text-xl leading-relaxed">{result.text}</p>
+                    </motion.div>
+                  ))}
+
+                  {searchResults.length === 0 && !isSearching && searchQuery && (
+                    <div className="card-elegant p-20 text-center">
+                      <Search size={48} className="text-bible-accent/10 mx-auto mb-6" />
+                      <h3 className="text-2xl font-serif font-bold mb-2">Sem resultados</h3>
+                      <p className="text-bible-muted">Não encontramos versículos com esses termos. Tente palavras sinônimas.</p>
+                    </div>
+                  )}
+
+                  {!searchQuery && (
+                    <div className="card-elegant p-20 text-center">
+                      <Book size={48} className="text-bible-accent/10 mx-auto mb-6" />
+                      <h3 className="text-2xl font-serif font-bold mb-2">Pronto para Explorar</h3>
+                      <p className="text-bible-muted">Digite algo que esteja em seu coração para encontrar nas Escrituras.</p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+
+            {activeTab === "dashboard" && (
+              <motion.div 
+                key="dashboard"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-5xl mx-auto space-y-12"
+              >
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-bible-muted">Sua Jornada de Fé</span>
+                  <h2 className="text-5xl font-serif font-bold">Estatísticas</h2>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {[
+                    { label: "Capítulos Lidos", value: readCount, sub: `de ${totalChapters} totais`, icon: BookOpen },
+                    { label: "Conclusão", value: `${progressPercent}%`, sub: "da Bíblia Sagrada", icon: BarChart2 },
+                    { label: "Reflexões", value: notes.length, sub: "notas no diário", icon: StickyNote }
+                  ].map((stat, idx) => (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      key={stat.label}
+                      className="card-elegant p-10 relative overflow-hidden group"
+                    >
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-bible-accent/[0.03] rounded-bl-[4rem] transition-all group-hover:scale-110" />
+                      <stat.icon className="text-bible-accent/20 mb-6" size={32} />
+                      <div className="text-bible-muted text-[10px] font-bold uppercase tracking-widest mb-3">{stat.label}</div>
+                      <div className="text-6xl font-serif font-bold text-bible-accent mb-2">{stat.value}</div>
+                      <div className="text-xs font-medium text-bible-muted">{stat.sub}</div>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <div className="card-elegant p-12">
+                  <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-bible-muted mb-10 flex items-center gap-3">
+                    <BarChart2 size={14} />
+                    Progresso por Seção
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-10">
+                    {CATEGORIES.map(cat => {
+                      const catBooks = BIBLE_BOOKS.filter(b => b.category === cat);
+                      const catTotal = catBooks.reduce((acc, b) => acc + b.chapters, 0);
+                      const catRead = readChapters.filter(rc => catBooks.some(b => b.name === rc.book)).length;
+                      const catPercent = Math.round((catRead / catTotal) * 100);
+
+                      return (
+                        <div key={cat} className="space-y-3">
+                          <div className="flex justify-between items-end">
+                            <span className="text-sm font-bold text-bible-ink/80">{cat}</span>
+                            <span className="text-[10px] font-mono font-bold text-bible-accent">{catRead}/{catTotal}</span>
+                          </div>
+                          <div className="h-2.5 bg-bible-accent/5 rounded-full overflow-hidden p-0.5">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${catPercent}%` }}
+                              transition={{ duration: 1.5, ease: "circOut" }}
+                              className="h-full bg-bible-accent rounded-full shadow-sm"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </main>
     </div>
