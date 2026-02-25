@@ -52,12 +52,12 @@ let isImporting = false;
 let importProgress = 0;
 
 async function importBible() {
-  const count = db.prepare("SELECT COUNT(*) as count FROM verses").get() as { count: number };
-  if (count.count > 0) return;
-
-  isImporting = true;
-  console.log("Importing Bible data...");
   try {
+    const count = db.prepare("SELECT COUNT(*) as count FROM verses").get() as { count: number };
+    if (count.count > 0) return;
+
+    isImporting = true;
+    console.log("Importing Bible data...");
     const response = await fetch("https://raw.githubusercontent.com/thiagobodruk/bible/master/json/pt_aa.json");
     const data = await response.json() as any[];
     
@@ -82,18 +82,22 @@ async function importBible() {
   }
 }
 
-async function startServer() {
+export async function createExpressApp() {
   importBible(); // Don't await
   const app = express();
-  const PORT = 3000;
 
   app.use(express.json());
 
   // API Routes
   app.get("/api/bible/status", (req, res) => {
-    const count = db.prepare("SELECT COUNT(*) as count FROM verses").get() as { count: number };
-    res.json({ isImporting, progress: importProgress, totalVerses: count.count });
+    try {
+      const count = db.prepare("SELECT COUNT(*) as count FROM verses").get() as { count: number };
+      res.json({ isImporting, progress: importProgress, totalVerses: count.count });
+    } catch (e) {
+      res.json({ isImporting: false, progress: 0, totalVerses: 0 });
+    }
   });
+
   app.get("/api/progress", (req, res) => {
     const rows = db.prepare("SELECT book, chapter FROM read_chapters").all();
     res.json(rows);
@@ -141,14 +145,17 @@ async function startServer() {
     const { q } = req.query;
     if (!q) return res.json([]);
     
-    // Use FTS5 for efficient searching
-    const rows = db.prepare(`
-      SELECT book, chapter, verse, text 
-      FROM verses_search 
-      WHERE text MATCH ? 
-      LIMIT 100
-    `).all(q);
-    res.json(rows);
+    try {
+      const rows = db.prepare(`
+        SELECT book, chapter, verse, text 
+        FROM verses_search 
+        WHERE text MATCH ? 
+        LIMIT 100
+      `).all(q);
+      res.json(rows);
+    } catch (e) {
+      res.json([]);
+    }
   });
 
   // Vite middleware for development
@@ -165,9 +172,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+if (process.env.NODE_ENV !== "test") {
+  const PORT = parseInt(process.env.PORT || "3000", 10);
+  createExpressApp().then(app => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  });
+}
