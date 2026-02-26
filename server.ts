@@ -3,6 +3,9 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import session from "express-session";
+import bcrypt from "bcryptjs";
+import cookieParser from "cookie-parser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,18 +14,28 @@ const db = new Database("bible.db");
 
 // Initialize database
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS read_chapters (
+    user_id INTEGER,
     book TEXT,
     chapter INTEGER,
-    PRIMARY KEY (book, chapter)
+    PRIMARY KEY (user_id, book, chapter),
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     book TEXT,
     chapter INTEGER,
     content TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS verses (
@@ -47,6 +60,14 @@ db.exec(`
     INSERT INTO verses_search(rowid, book, chapter, verse, text) VALUES (new.id, new.book, new.chapter, new.verse, new.text);
   END;
 `);
+
+// Add user_id column to existing tables if they don't have it (migration helper)
+try {
+  db.exec("ALTER TABLE read_chapters ADD COLUMN user_id INTEGER REFERENCES users(id)");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE notes ADD COLUMN user_id INTEGER REFERENCES users(id)");
+} catch (e) {}
 
 let isImporting = false;
 let importProgress = 0;
@@ -82,11 +103,82 @@ async function importBible() {
   }
 }
 
+declare module "express-session" {
+  interface SessionData {
+    userId: number;
+    username: string;
+  }
+}
+
 export async function createExpressApp() {
   importBible(); // Don't await
   const app = express();
 
   app.use(express.json());
+  app.use(cookieParser());
+  app.use(session({
+    secret: "bible-app-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    }
+  }));
+
+  // Auth Routes
+  app.post("/api/auth/signup", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const result = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)").run(username, hashedPassword);
+      req.session.userId = result.lastInsertRowid as number;
+      req.session.username = username;
+      res.json({ id: req.session.userId, username });
+    } catch (e: any) {
+      if (e.code === "SQLITE_CONSTRAINT") {
+        res.status(400).json({ error: "Username already exists" });
+      } else {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+    
+    if (user && await bcrypt.compare(password, user.password)) {
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      res.json({ id: user.id, username: user.username });
+    } else {
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (req.session.userId) {
+      res.json({ id: req.session.userId, username: req.session.username });
+    } else {
+      res.status(401).json({ error: "Not authenticated" });
+    }
+  });
+
+  // Middleware to check auth
+  const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!req.session.userId) return res.status(401).json({ error: "Authentication required" });
+    next();
+  };
 
   // API Routes
   app.get("/api/bible/status", (req, res) => {
@@ -98,40 +190,40 @@ export async function createExpressApp() {
     }
   });
 
-  app.get("/api/progress", (req, res) => {
-    const rows = db.prepare("SELECT book, chapter FROM read_chapters").all();
+  app.get("/api/progress", requireAuth, (req, res) => {
+    const rows = db.prepare("SELECT book, chapter FROM read_chapters WHERE user_id = ?").all(req.session.userId);
     res.json(rows);
   });
 
-  app.post("/api/read", (req, res) => {
+  app.post("/api/read", requireAuth, (req, res) => {
     const { book, chapter, read } = req.body;
     if (read) {
-      db.prepare("INSERT OR IGNORE INTO read_chapters (book, chapter) VALUES (?, ?)").run(book, chapter);
+      db.prepare("INSERT OR IGNORE INTO read_chapters (user_id, book, chapter) VALUES (?, ?, ?)").run(req.session.userId, book, chapter);
     } else {
-      db.prepare("DELETE FROM read_chapters WHERE book = ? AND chapter = ?").run(book, chapter);
+      db.prepare("DELETE FROM read_chapters WHERE user_id = ? AND book = ? AND chapter = ?").run(req.session.userId, book, chapter);
     }
     res.json({ success: true });
   });
 
-  app.get("/api/notes", (req, res) => {
+  app.get("/api/notes", requireAuth, (req, res) => {
     const { q } = req.query;
     let rows;
     if (q) {
-      rows = db.prepare("SELECT * FROM notes WHERE content LIKE ? ORDER BY created_at DESC").all(`%${q}%`);
+      rows = db.prepare("SELECT * FROM notes WHERE user_id = ? AND content LIKE ? ORDER BY created_at DESC").all(req.session.userId, `%${q}%`);
     } else {
-      rows = db.prepare("SELECT * FROM notes ORDER BY created_at DESC").all();
+      rows = db.prepare("SELECT * FROM notes WHERE user_id = ? ORDER BY created_at DESC").all(req.session.userId);
     }
     res.json(rows);
   });
 
-  app.post("/api/notes", (req, res) => {
+  app.post("/api/notes", requireAuth, (req, res) => {
     const { book, chapter, content } = req.body;
-    const result = db.prepare("INSERT INTO notes (book, chapter, content) VALUES (?, ?, ?)").run(book, chapter, content);
+    const result = db.prepare("INSERT INTO notes (user_id, book, chapter, content) VALUES (?, ?, ?, ?)").run(req.session.userId, book, chapter, content);
     res.json({ id: result.lastInsertRowid });
   });
 
-  app.delete("/api/notes/:id", (req, res) => {
-    db.prepare("DELETE FROM notes WHERE id = ?").run(req.params.id);
+  app.delete("/api/notes/:id", requireAuth, (req, res) => {
+    db.prepare("DELETE FROM notes WHERE id = ? AND user_id = ?").run(req.params.id, req.session.userId);
     res.json({ success: true });
   });
 

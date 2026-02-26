@@ -12,10 +12,12 @@ import {
   Trash2,
   Plus,
   ArrowLeft,
-  Loader2
+  Loader2,
+  LogOut
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { BIBLE_BOOKS, CATEGORIES, TESTAMENTS, BibleBook } from "./data/bible-metadata";
+import { Login } from "./components/Login";
 
 interface ReadChapter {
   book: string;
@@ -37,6 +39,8 @@ interface BibleVerse {
 }
 
 export default function App() {
+  const [user, setUser] = useState<{ id: number; username: string } | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [readChapters, setReadChapters] = useState<ReadChapter[]>([]);
@@ -55,12 +59,48 @@ export default function App() {
 
   // Fetch initial data
   useEffect(() => {
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchProgress();
+      fetchNotes();
+    }
+  }, [user]);
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch("/api/auth/me");
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data);
+      }
+    } catch (e) {
+      console.error("Auth check failed");
+    } finally {
+      setIsAuthChecking(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setUser(null);
+      setSelectedBook(null);
+      setActiveTab("read");
+    } catch (e) {
+      console.error("Logout failed");
+    }
+  };
+
+  const fetchProgress = () => {
     fetch("/api/progress")
       .then(res => res.json())
       .then(data => setReadChapters(data));
-    
-    fetchNotes();
+  };
 
+  useEffect(() => {
     const checkStatus = () => {
       fetch("/api/bible/status")
         .then(res => res.json())
@@ -169,6 +209,18 @@ export default function App() {
   const progressPercent = Math.round((readCount / totalChapters) * 100);
 
   const filteredNotes = notes;
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-netflix-black flex items-center justify-center">
+        <Loader2 className="animate-spin text-netflix-red" size={48} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onLogin={setUser} />;
+  }
 
   return (
     <div className="flex h-screen bg-netflix-black text-white font-sans overflow-hidden selection:bg-netflix-red selection:text-white">
@@ -296,10 +348,20 @@ export default function App() {
             ))}
           </div>
           
-          <div className="flex items-center gap-4">
-            <div className="w-8 h-8 bg-netflix-red rounded overflow-hidden flex items-center justify-center text-xs font-bold">
-              B
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center text-xs font-bold">
+                {user.username[0].toUpperCase()}
+              </div>
+              <span className="text-sm font-bold hidden sm:inline">{user.username}</span>
             </div>
+            <button 
+              onClick={handleLogout}
+              className="text-white/60 hover:text-white transition-colors"
+              title="Sair"
+            >
+              <LogOut size={20} />
+            </button>
           </div>
         </header>
 
