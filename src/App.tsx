@@ -40,6 +40,7 @@ interface BibleVerse {
 
 export default function App() {
   const [user, setUser] = useState<{ id: number; username: string } | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem("bible_token"));
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
@@ -57,8 +58,16 @@ export default function App() {
   const [importStatus, setImportStatus] = useState<{ isImporting: boolean; progress: number; totalVerses: number } | null>(null);
   const [highlightedVerse, setHighlightedVerse] = useState<number | null>(null);
 
+  const [isTogglingRead, setIsTogglingRead] = useState(false);
+
+  // Log readChapters changes
+  useEffect(() => {
+    console.log("Current readChapters state:", readChapters);
+  }, [readChapters]);
+
   // Fetch initial data
   useEffect(() => {
+    console.log("Cookies enabled:", navigator.cookieEnabled);
     checkAuth();
   }, []);
 
@@ -70,39 +79,83 @@ export default function App() {
   }, [user]);
 
   const checkAuth = async () => {
+    const storedToken = localStorage.getItem("bible_token");
+    if (!storedToken) {
+      setUser(null);
+      setIsAuthChecking(false);
+      return;
+    }
     try {
-      const response = await fetch("/api/auth/me");
+      const response = await fetch("/api/auth/me", { 
+        headers: { "Authorization": `Bearer ${storedToken}` }
+      });
       if (response.ok) {
         const data = await response.json();
         setUser(data);
+        setToken(storedToken);
+      } else {
+        localStorage.removeItem("bible_token");
+        setUser(null);
+        setToken(null);
       }
     } catch (e) {
       console.error("Auth check failed");
+      setUser(null);
     } finally {
       setIsAuthChecking(false);
     }
   };
 
+  const handleLogin = (userData: { id: number; username: string }, userToken: string) => {
+    localStorage.setItem("bible_token", userToken);
+    setToken(userToken);
+    setUser(userData);
+  };
+
   const handleLogout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
-      setSelectedBook(null);
-      setActiveTab("read");
-    } catch (e) {
-      console.error("Logout failed");
-    }
+    localStorage.removeItem("bible_token");
+    setToken(null);
+    setUser(null);
+    setSelectedBook(null);
+    setReadChapters([]);
+    setNotes([]);
+    setActiveTab("read");
   };
 
   const fetchProgress = () => {
-    fetch("/api/progress")
-      .then(res => res.json())
-      .then(data => setReadChapters(data));
+    if (!user || !token) return;
+    console.log(`Fetching progress for user: ${user.username} (ID: ${user.id})...`);
+    fetch("/api/progress", { 
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) {
+          if (res.status === 401) {
+            handleLogout();
+          }
+          throw new Error(`Progress fetch failed with status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log("Progress data received:", data);
+        if (Array.isArray(data)) {
+          // Merge with local state to avoid losing optimistic updates during sync
+          setReadChapters(prev => {
+            const existing = new Set(prev.map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+            const newData = data.filter(rc => !existing.has(`${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+            return [...prev, ...newData];
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching progress:", err);
+      });
   };
 
   useEffect(() => {
     const checkStatus = () => {
-      fetch("/api/bible/status")
+      fetch("/api/bible/status", { credentials: "include" })
         .then(res => res.json())
         .then(data => {
           setImportStatus(data);
@@ -115,10 +168,20 @@ export default function App() {
   }, []);
 
   const fetchNotes = (query?: string) => {
+    if (!user || !token) return;
     const url = query ? `/api/notes?q=${encodeURIComponent(query)}` : "/api/notes";
-    fetch(url)
+    fetch(url, { 
+      headers: { "Authorization": `Bearer ${token}` }
+    })
       .then(res => res.json())
-      .then(data => setNotes(data));
+      .then(data => {
+        if (Array.isArray(data)) {
+          setNotes(data);
+        } else {
+          setNotes([]);
+        }
+      })
+      .catch(() => setNotes([]));
   };
 
   useEffect(() => {
@@ -168,26 +231,66 @@ export default function App() {
       });
   };
 
+  const isChapterRead = (book: string, chapter: number) => {
+    if (!Array.isArray(readChapters)) return false;
+    const searchBook = book.trim().toLowerCase();
+    return readChapters.some(rc => 
+      rc.book.trim().toLowerCase() === searchBook && rc.chapter === chapter
+    );
+  };
+
   const toggleRead = (book: string, chapter: number) => {
-    const isRead = readChapters.some(rc => rc.book === book && rc.chapter === chapter);
+    if (isTogglingRead || !user || !token) return;
+    
+    const bookName = book.trim();
+    const isRead = isChapterRead(bookName, chapter);
+    const previousReadChapters = [...readChapters];
+
+    console.log(`Toggling read for "${bookName}" Ch ${chapter}. Current isRead: ${isRead}`);
+
+    // Optimistic update
+    if (isRead) {
+      setReadChapters(prev => prev.filter(rc => 
+        !(rc.book.trim().toLowerCase() === bookName.toLowerCase() && rc.chapter === chapter)
+      ));
+    } else {
+      setReadChapters(prev => [...prev, { book: bookName, chapter }]);
+    }
+
+    setIsTogglingRead(true);
     fetch("/api/read", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book, chapter, read: !isRead })
-    }).then(() => {
-      if (isRead) {
-        setReadChapters(prev => prev.filter(rc => !(rc.book === book && rc.chapter === chapter)));
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ book: bookName, chapter, read: !isRead })
+    }).then(res => {
+      if (res.ok) {
+        console.log("Toggle read successful on server");
       } else {
-        setReadChapters(prev => [...prev, { book, chapter }]);
+        // Rollback on error
+        setReadChapters(previousReadChapters);
+        console.error("Failed to toggle read status", res.status);
+        if (res.status === 401) handleLogout();
       }
-    });
+    })
+    .catch(err => {
+      // Rollback on network error
+      setReadChapters(previousReadChapters);
+      console.error("Network error toggling read status:", err);
+    })
+    .finally(() => setIsTogglingRead(false));
   };
 
   const addNote = () => {
-    if (!selectedBook || !noteContent.trim()) return;
+    if (!selectedBook || !noteContent.trim() || !token) return;
     fetch("/api/notes", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({ 
         book: selectedBook.name, 
         chapter: selectedChapter, 
@@ -200,13 +303,21 @@ export default function App() {
   };
 
   const deleteNote = (id: number) => {
-    fetch(`/api/notes/${id}`, { method: "DELETE" })
+    if (!token) return;
+    fetch(`/api/notes/${id}`, { 
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    })
       .then(() => fetchNotes());
   };
 
   const totalChapters = useMemo(() => BIBLE_BOOKS.reduce((acc, b) => acc + b.chapters, 0), []);
-  const readCount = readChapters.length;
-  const progressPercent = Math.round((readCount / totalChapters) * 100);
+  const readCount = useMemo(() => {
+    if (!Array.isArray(readChapters)) return 0;
+    const unique = new Set(readChapters.map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+    return unique.size;
+  }, [readChapters]);
+  const progressPercent = totalChapters > 0 ? Math.round((readCount / totalChapters) * 100) : 0;
 
   const filteredNotes = notes;
 
@@ -219,7 +330,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login onLogin={setUser} />;
+    return <Login onLogin={handleLogin} />;
   }
 
   return (
@@ -243,7 +354,13 @@ export default function App() {
             className="w-80 bg-black flex flex-col h-full z-40 border-r border-white/5"
           >
             <div className="p-8">
-              <h1 className="text-3xl font-bold tracking-tighter flex items-center gap-2 text-netflix-red">
+              <h1 
+                onClick={() => {
+                  setSelectedBook(null);
+                  setActiveTab("read");
+                }}
+                className="text-3xl font-bold tracking-tighter flex items-center gap-2 text-netflix-red cursor-pointer hover:scale-105 transition-transform"
+              >
                 BÍBLIA
               </h1>
             </div>
@@ -294,7 +411,16 @@ export default function App() {
 
             <div className="p-6 bg-netflix-dark-gray/50 border-t border-white/5">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-white/40 mb-3">
-                <span>Progresso</span>
+                <div className="flex items-center gap-2">
+                  <span>Progresso</span>
+                  <button 
+                    onClick={fetchProgress}
+                    className="hover:text-white transition-colors"
+                    title="Sincronizar"
+                  >
+                    <Loader2 size={10} className={isTogglingRead ? "animate-spin" : ""} />
+                  </button>
+                </div>
                 <span className="text-netflix-red">{progressPercent}%</span>
               </div>
               <div className="h-1 bg-white/10 rounded-full overflow-hidden">
@@ -336,7 +462,10 @@ export default function App() {
             ].map((tab) => (
               <button 
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  if (tab.id === "read") setSelectedBook(null);
+                }}
                 className={`text-sm font-medium transition-all ${
                   activeTab === tab.id 
                     ? "text-white font-bold" 
@@ -545,14 +674,19 @@ export default function App() {
                             <div className="flex items-center gap-4">
                               <button
                                 onClick={() => toggleRead(selectedBook.name, selectedChapter)}
+                                disabled={isTogglingRead}
                                 className={`flex items-center gap-2 px-6 py-2 rounded font-bold transition-all ${
-                                  readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter)
-                                    ? "bg-white/10 text-white border border-white/20"
+                                  isChapterRead(selectedBook.name, selectedChapter)
+                                    ? "bg-netflix-red text-white border border-netflix-red shadow-[0_0_10px_rgba(229,9,20,0.5)]"
                                     : "bg-white text-black hover:bg-white/90"
-                                }`}
+                                } ${isTogglingRead ? "opacity-50 cursor-not-allowed" : ""}`}
                               >
-                                <CheckCircle size={20} />
-                                {readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === selectedChapter) ? "Concluído" : "Marcar Lido"}
+                                {isTogglingRead ? (
+                                  <Loader2 size={20} className="animate-spin" />
+                                ) : (
+                                  <CheckCircle size={20} />
+                                )}
+                                {isChapterRead(selectedBook.name, selectedChapter) ? "Concluído" : "Marcar Lido"}
                               </button>
                             </div>
                           </div>
@@ -625,9 +759,13 @@ export default function App() {
                               }}
                               className={`h-20 rounded flex flex-col items-center justify-center gap-1 transition-all border ${
                                 selectedChapter === ch 
-                                  ? "bg-white text-black border-white scale-105 z-10 shadow-2xl" 
-                                  : readChapters.some(rc => rc.book === selectedBook.name && rc.chapter === ch)
-                                    ? "bg-netflix-red/10 text-netflix-red border-netflix-red/30"
+                                  ? `bg-white text-black border-white scale-105 z-10 shadow-2xl ${
+                                      isChapterRead(selectedBook.name, ch)
+                                        ? "ring-2 ring-netflix-red ring-offset-2 ring-offset-netflix-black"
+                                        : ""
+                                    }`
+                                  : isChapterRead(selectedBook.name, ch)
+                                    ? "bg-netflix-red text-white border-netflix-red shadow-[0_0_15px_rgba(229,9,20,0.3)]"
                                     : "bg-netflix-dark-gray text-white/60 border-white/5 hover:bg-netflix-light-gray hover:text-white"
                               }`}
                             >

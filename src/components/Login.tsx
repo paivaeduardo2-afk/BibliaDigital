@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 
 interface LoginProps {
-  onLogin: (user: { id: number; username: string }) => void;
+  onLogin: (user: { id: number; username: string }, token: string) => void;
 }
 
 export function Login({ onLogin }: LoginProps) {
@@ -24,11 +24,13 @@ export function Login({ onLogin }: LoginProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
+        credentials: "include"
       });
 
       const data = await response.json();
       if (response.ok) {
-        onLogin(data);
+        console.log("Login successful, user data:", data);
+        onLogin({ id: data.id, username: data.username }, data.token);
       } else {
         setError(data.error || "Ocorreu um erro");
       }
@@ -111,7 +113,7 @@ export function Login({ onLogin }: LoginProps) {
                 onClick={() => setIsLogin(false)}
                 className="text-white hover:underline font-bold"
               >
-                Assine agora.
+                Cadastre-se agora.
               </button>
             </p>
           ) : (
