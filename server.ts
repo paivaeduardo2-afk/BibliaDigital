@@ -41,6 +41,15 @@ db.exec(`
   CREATE TRIGGER IF NOT EXISTS verses_ai AFTER INSERT ON verses BEGIN
     INSERT INTO verses_search(rowid, book, chapter, verse, text) VALUES (new.id, new.book, new.chapter, new.verse, new.text);
   END;
+
+  CREATE TABLE IF NOT EXISTS highlights (
+    user_id INTEGER,
+    book TEXT,
+    chapter INTEGER,
+    verse INTEGER,
+    PRIMARY KEY (user_id, book, chapter, verse),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // Migration helper for read_chapters
@@ -312,6 +321,31 @@ export async function createExpressApp() {
     const userId = req.user.id;
     db.prepare("DELETE FROM notes WHERE id = ? AND user_id = ?").run(req.params.id, userId);
     res.json({ success: true });
+  });
+
+  app.get("/api/highlights", requireAuth, (req: any, res) => {
+    const userId = req.user.id;
+    try {
+      const rows = db.prepare("SELECT book, chapter, verse FROM highlights WHERE user_id = ?").all(userId);
+      res.json(rows);
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch highlights" });
+    }
+  });
+
+  app.post("/api/highlights", requireAuth, (req: any, res) => {
+    const { book, chapter, verse, highlight } = req.body;
+    const userId = req.user.id;
+    try {
+      if (highlight) {
+        db.prepare("INSERT OR IGNORE INTO highlights (user_id, book, chapter, verse) VALUES (?, ?, ?, ?)").run(userId, book, chapter, verse);
+      } else {
+        db.prepare("DELETE FROM highlights WHERE user_id = ? AND book = ? AND chapter = ? AND verse = ?").run(userId, book, chapter, verse);
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to update highlight" });
+    }
   });
 
   app.get("/api/bible/:book/:chapter", (req, res) => {

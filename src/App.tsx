@@ -24,6 +24,12 @@ interface ReadChapter {
   chapter: number;
 }
 
+interface Highlight {
+  book: string;
+  chapter: number;
+  verse: number;
+}
+
 interface Note {
   id: number;
   book: string;
@@ -45,6 +51,7 @@ export default function App() {
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<number>(1);
   const [readChapters, setReadChapters] = useState<ReadChapter[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<"read" | "notes" | "search" | "dashboard">("read");
@@ -75,6 +82,7 @@ export default function App() {
     if (user) {
       fetchProgress();
       fetchNotes();
+      fetchHighlights();
     }
   }, [user]);
 
@@ -142,15 +150,30 @@ export default function App() {
         if (Array.isArray(data)) {
           // Merge with local state to avoid losing optimistic updates during sync
           setReadChapters(prev => {
-            const existing = new Set(prev.map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
-            const newData = data.filter(rc => !existing.has(`${rc.book.trim().toLowerCase()}-${rc.chapter}`));
-            return [...prev, ...newData];
+            const safePrev = Array.isArray(prev) ? prev : [];
+            const existing = new Set(safePrev.filter(rc => rc && rc.book).map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+            const newData = data.filter(rc => rc && rc.book && !existing.has(`${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+            return [...safePrev, ...newData];
           });
         }
       })
       .catch((err) => {
         console.error("Error fetching progress:", err);
       });
+  };
+
+  const fetchHighlights = () => {
+    if (!user || !token) return;
+    fetch("/api/highlights", {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setHighlights(data.filter(h => h && h.book));
+        }
+      })
+      .catch(err => console.error("Error fetching highlights:", err));
   };
 
   useEffect(() => {
@@ -232,15 +255,55 @@ export default function App() {
   };
 
   const isChapterRead = (book: string, chapter: number) => {
-    if (!Array.isArray(readChapters)) return false;
+    if (!Array.isArray(readChapters) || !book) return false;
     const searchBook = book.trim().toLowerCase();
     return readChapters.some(rc => 
-      rc.book.trim().toLowerCase() === searchBook && rc.chapter === chapter
+      rc && rc.book && rc.book.trim().toLowerCase() === searchBook && rc.chapter === chapter
     );
   };
 
+  const isVerseHighlighted = (book: string, chapter: number, verse: number) => {
+    if (!Array.isArray(highlights) || !book) return false;
+    const searchBook = book.trim().toLowerCase();
+    return highlights.some(h => 
+      h && h.book && h.book.trim().toLowerCase() === searchBook && h.chapter === chapter && h.verse === verse
+    );
+  };
+
+  const toggleHighlight = (book: string, chapter: number, verse: number) => {
+    if (!user || !token || !book) return;
+    
+    const isHighlighted = isVerseHighlighted(book, chapter, verse);
+    const previousHighlights = [...highlights];
+
+    // Optimistic update
+    if (isHighlighted) {
+      setHighlights(prev => (Array.isArray(prev) ? prev : []).filter(h => 
+        !(h && h.book && h.book.trim().toLowerCase() === book.toLowerCase() && h.chapter === chapter && h.verse === verse)
+      ));
+    } else {
+      setHighlights(prev => [...(Array.isArray(prev) ? prev : []), { book, chapter, verse }]);
+    }
+
+    fetch("/api/highlights", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ book, chapter, verse, highlight: !isHighlighted })
+    }).then(res => {
+      if (!res.ok) {
+        setHighlights(previousHighlights);
+        if (res.status === 401) handleLogout();
+      }
+    }).catch(() => {
+      setHighlights(previousHighlights);
+    });
+  };
+
   const toggleRead = (book: string, chapter: number) => {
-    if (isTogglingRead || !user || !token) return;
+    if (isTogglingRead || !user || !token || !book) return;
     
     const bookName = book.trim();
     const isRead = isChapterRead(bookName, chapter);
@@ -250,11 +313,11 @@ export default function App() {
 
     // Optimistic update
     if (isRead) {
-      setReadChapters(prev => prev.filter(rc => 
-        !(rc.book.trim().toLowerCase() === bookName.toLowerCase() && rc.chapter === chapter)
+      setReadChapters(prev => (Array.isArray(prev) ? prev : []).filter(rc => 
+        !(rc && rc.book && rc.book.trim().toLowerCase() === bookName.toLowerCase() && rc.chapter === chapter)
       ));
     } else {
-      setReadChapters(prev => [...prev, { book: bookName, chapter }]);
+      setReadChapters(prev => [...(Array.isArray(prev) ? prev : []), { book: bookName, chapter }]);
     }
 
     setIsTogglingRead(true);
@@ -314,7 +377,7 @@ export default function App() {
   const totalChapters = useMemo(() => BIBLE_BOOKS.reduce((acc, b) => acc + b.chapters, 0), []);
   const readCount = useMemo(() => {
     if (!Array.isArray(readChapters)) return 0;
-    const unique = new Set(readChapters.map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
+    const unique = new Set(readChapters.filter(rc => rc && rc.book).map(rc => `${rc.book.trim().toLowerCase()}-${rc.chapter}`));
     return unique.size;
   }, [readChapters]);
   const progressPercent = totalChapters > 0 ? Math.round((readCount / totalChapters) * 100) : 0;
@@ -702,18 +765,43 @@ export default function App() {
                                   <p 
                                     key={verse.verse} 
                                     id={`verse-${verse.verse}`}
-                                    className={`leading-relaxed text-xl transition-all duration-500 p-4 rounded group ${
-                                      highlightedVerse === verse.verse 
-                                        ? "bg-white/10 ring-1 ring-white/20" 
-                                        : "hover:bg-white/5"
+                                    onClick={() => toggleHighlight(selectedBook.name, selectedChapter, verse.verse)}
+                                    className={`leading-relaxed text-xl transition-all duration-500 p-4 rounded group cursor-pointer relative ${
+                                      isVerseHighlighted(selectedBook.name, selectedChapter, verse.verse)
+                                        ? "bg-yellow-500/20 ring-1 ring-yellow-500/40" 
+                                        : highlightedVerse === verse.verse 
+                                          ? "bg-white/10 ring-1 ring-white/20" 
+                                          : "hover:bg-white/5"
                                     }`}
                                   >
                                     <span className="inline-block w-8 text-xs font-bold text-netflix-red mr-4 opacity-60">
                                       {verse.verse}
                                     </span>
                                     <span className="text-white/90">{verse.text}</span>
+                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] uppercase font-bold tracking-widest text-white/40">
+                                      {isVerseHighlighted(selectedBook.name, selectedChapter, verse.verse) ? "Remover Destaque" : "Destacar"}
+                                    </span>
                                   </p>
                                 ))}
+
+                                <div className="pt-12 flex justify-center border-t border-white/5 mt-12">
+                                  <button
+                                    onClick={() => toggleRead(selectedBook.name, selectedChapter)}
+                                    disabled={isTogglingRead}
+                                    className={`flex items-center gap-3 px-10 py-4 rounded-md font-bold text-lg transition-all ${
+                                      isChapterRead(selectedBook.name, selectedChapter)
+                                        ? "bg-netflix-red text-white border border-netflix-red shadow-[0_0_20px_rgba(229,9,20,0.4)]"
+                                        : "bg-white text-black hover:bg-white/90"
+                                    } ${isTogglingRead ? "opacity-50 cursor-not-allowed" : ""}`}
+                                  >
+                                    {isTogglingRead ? (
+                                      <Loader2 size={24} className="animate-spin" />
+                                    ) : (
+                                      <CheckCircle size={24} />
+                                    )}
+                                    {isChapterRead(selectedBook.name, selectedChapter) ? "Capítulo Concluído" : "Marcar Capítulo como Lido"}
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
